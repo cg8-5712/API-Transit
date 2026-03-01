@@ -1,0 +1,86 @@
+[package]
+name = "api-transit"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "api-transit"
+path = "src/main.rs"
+
+[dependencies]
+# Web framework
+actix-web = { version = "4", features = ["macros"] }
+
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# Database ORM
+sea-orm = { version = "1", features = [
+    "sqlx-sqlite",
+    "sqlx-postgres",
+    "sqlx-mysql",
+    "runtime-tokio-native-tls",
+    "macros",
+    "chrono",
+] }
+sea-orm-migration = { version = "1", features = [
+    "sqlx-sqlite",
+    "sqlx-postgres",
+    "sqlx-mysql",
+    "runtime-tokio-native-tls",
+] }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# HTTP client (for proxy forwarding)
+reqwest = { version = "0.12", default-features = false, features = [
+    "json",
+    "rustls-tls",
+    "stream",
+] }
+
+# Tracing / Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+tracing-actix-web = "0.7"
+
+# Memory allocator (ARM64 optimization)
+mimalloc = { version = "0.1", default-features = false }
+
+# Error handling
+thiserror = "1"
+anyhow = "1"
+
+# Crypto
+sha2 = "0.10"
+hex = "0.4"
+
+# Date/time
+chrono = { version = "0.4", features = ["serde"] }
+
+# UUID
+uuid = { version = "1", features = ["v4"] }
+
+# Env file loading
+dotenvy = "0.15"
+
+# Regex for route matching
+regex = "1"
+
+# Async utilities
+futures-util = "0.3"
+async-trait = "0.1"
+
+# Random number generation
+rand = "0.8"
+
+# Bytes
+bytes = "1"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true
