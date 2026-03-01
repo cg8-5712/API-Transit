@@ -1,5 +1,26 @@
 use anyhow::Context;
 
+/// Application environment
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Environment {
+    Development,
+    Production,
+}
+
+impl Environment {
+    pub fn from_str(s: &str) -> Self {
+        match s.to_lowercase().as_str() {
+            "dev" | "development" => Self::Development,
+            "prod" | "production" => Self::Production,
+            _ => Self::Production, // default to production for safety
+        }
+    }
+
+    pub fn is_dev(&self) -> bool {
+        matches!(self, Self::Development)
+    }
+}
+
 /// Application configuration loaded from environment variables.
 #[derive(Debug, Clone)]
 pub struct AppConfig {
@@ -11,6 +32,8 @@ pub struct AppConfig {
     pub admin_secret: String,
     /// Health check interval in seconds.
     pub health_check_interval_secs: u64,
+    /// Application environment (dev/prod).
+    pub environment: Environment,
 }
 
 impl AppConfig {
@@ -32,6 +55,10 @@ impl AppConfig {
                 .unwrap_or_else(|_| "1800".to_string())
                 .parse::<u64>()
                 .context("HEALTH_CHECK_INTERVAL must be a valid number of seconds")?,
+
+            environment: Environment::from_str(
+                &std::env::var("ENVIRONMENT").unwrap_or_else(|_| "production".to_string())
+            ),
         })
     }
 }

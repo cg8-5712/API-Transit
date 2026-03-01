@@ -5,6 +5,7 @@ mod routes_api;
 mod stats_api;
 mod token_api;
 mod upstream_api;
+mod auth_api;
 
 /// Configure all admin endpoints under `/admin`.
 pub fn configure_admin(cfg: &mut web::ServiceConfig) {
@@ -49,5 +50,13 @@ pub fn configure_admin(cfg: &mut web::ServiceConfig) {
             .route("/upstream", web::get().to(stats_api::upstream_stats))
             .route("/token", web::get().to(stats_api::token_stats))
             .route("/requests", web::get().to(stats_api::recent_requests)),
+    );
+}
+
+/// Configure public auth endpoints (no authentication required)
+pub fn configure_auth(cfg: &mut web::ServiceConfig) {
+    cfg.service(
+        web::scope("/auth")
+            .route("/login", web::post().to(auth_api::login)),
     );
 }

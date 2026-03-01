@@ -10,6 +10,7 @@ mod db;
 mod error;
 mod health;
 mod middleware;
+mod mock;
 mod proxy;
 mod service;
 mod state;
@@ -32,12 +33,25 @@ async fn main() -> anyhow::Result<()> {
 
     let config = config::AppConfig::from_env()?;
 
+    tracing::info!(
+        environment = ?config.environment,
+        "Starting API-Transit in {:?} mode",
+        config.environment
+    );
+
     // Connect to database
     let db = db::init(&config.database_url).await?;
 
     // Run pending migrations
     db::run_migrations(&db).await?;
     tracing::info!("Database migrations completed");
+
+    // Initialize mock data in development mode
+    if config.environment.is_dev() {
+        if let Err(e) = mock::init_mock_data(&db).await {
+            tracing::warn!("Failed to initialize mock data: {}", e);
+        }
+    }
 
     // Build shared HTTP client
     let http_client = reqwest::Client::builder()
@@ -84,6 +98,8 @@ async fn main() -> anyhow::Result<()> {
                 web::get()
                     .to(|| async { HttpResponse::Ok().json(serde_json::json!({"status": "ok"})) }),
             )
+            // Public auth endpoints (no authentication required)
+            .configure(api::configure_auth)
             // Admin management API (protected by ADMIN_SECRET)
             .service(
                 web::scope("/admin")

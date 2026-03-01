@@ -10,7 +10,7 @@ use crate::db::entities::api_tokens::{self, Entity as ApiToken};
 use crate::error::AppError;
 
 /// Hash a raw token using SHA-256, returning a lowercase hex string.
-fn hash_token(raw: &str) -> String {
+pub fn hash_token(raw: &str) -> String {
     let mut hasher = Sha256::new();
     hasher.update(raw.as_bytes());
     hex::encode(hasher.finalize())
