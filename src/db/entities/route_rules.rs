@@ -16,7 +16,11 @@ pub struct Model {
     /// Matching strategy: `exact`, `prefix`, or `regex`.
     pub match_type: String,
     /// Pin to a specific upstream (`None` = use global load balancer).
+    /// DEPRECATED: Use upstream_ids instead.
     pub upstream_id: Option<i64>,
+    /// Comma-separated list of upstream IDs for load balancing (e.g., "1,2,3").
+    /// If empty/null, uses all available upstreams.
+    pub upstream_ids: Option<String>,
     /// Higher priority = evaluated first.
     pub priority: i32,
     /// Additional HTTP headers to inject (JSON object).

@@ -8,6 +8,8 @@ pub struct RewriteResult {
     pub path: String,
     /// Upstream pinned by the rule (None = use global load balancer).
     pub upstream_id: Option<i64>,
+    /// List of upstream IDs for load balancing (empty = use all available).
+    pub upstream_ids: Vec<i64>,
 }
 
 /// Match `request_path` against the sorted list of enabled rules and produce
@@ -16,13 +18,29 @@ pub struct RewriteResult {
 pub fn rewrite(rules: &[route_rules::Model], request_path: &str) -> Option<RewriteResult> {
     for rule in rules {
         if let Some(path) = apply_rule(rule, request_path) {
+            // Parse upstream_ids from comma-separated string
+            let upstream_ids = parse_upstream_ids(&rule.upstream_ids);
+
             return Some(RewriteResult {
                 path,
                 upstream_id: rule.upstream_id,
+                upstream_ids,
             });
         }
     }
     None
+}
+
+/// Parse comma-separated upstream IDs (e.g., "1,2,3" -> [1, 2, 3])
+fn parse_upstream_ids(upstream_ids_str: &Option<String>) -> Vec<i64> {
+    match upstream_ids_str {
+        Some(s) if !s.trim().is_empty() => {
+            s.split(',')
+                .filter_map(|id| id.trim().parse::<i64>().ok())
+                .collect()
+        }
+        _ => Vec::new(),
+    }
 }
 
 fn apply_rule(rule: &route_rules::Model, path: &str) -> Option<String> {

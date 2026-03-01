@@ -38,13 +38,23 @@ pub async fn proxy_handler(
 
     // --- Route rewriting ---
     let rules = route_rule::list_enabled(&state.db).await?;
-    let (target_path, preferred_upstream_id) = match rewrite::rewrite(&rules, &inbound_path) {
-        Some(r) => (r.path, r.upstream_id),
-        None => (inbound_path.clone(), None),
+    let (target_path, preferred_upstream_id, upstream_ids) = match rewrite::rewrite(&rules, &inbound_path) {
+        Some(r) => (r.path, r.upstream_id, r.upstream_ids),
+        None => (inbound_path.clone(), None, Vec::new()),
     };
 
     // --- Upstream selection ---
-    let upstream_model = upstream::select(&state.db, &state, preferred_upstream_id).await?;
+    // Priority: preferred_upstream_id > upstream_ids > all available
+    let upstream_model = if let Some(id) = preferred_upstream_id {
+        // Single upstream specified (legacy)
+        upstream::get(&state.db, id).await?
+    } else if !upstream_ids.is_empty() {
+        // Multiple upstreams specified for load balancing
+        upstream::select_from_list(&state.db, &state, &upstream_ids).await?
+    } else {
+        // Use all available upstreams
+        upstream::select(&state.db, &state, None).await?
+    };
 
     let start = std::time::Instant::now();
 

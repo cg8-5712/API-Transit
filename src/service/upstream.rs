@@ -186,6 +186,47 @@ pub async fn select(
     }
 }
 
+/// Select an upstream from a specific list of IDs using load-balancing.
+pub async fn select_from_list(
+    db: &DatabaseConnection,
+    state: &AppState,
+    upstream_ids: &[i64],
+) -> Result<upstreams::Model, AppError> {
+    if upstream_ids.is_empty() {
+        return Err(AppError::NoAvailableUpstream);
+    }
+
+    // Fetch only the specified upstreams that are enabled and healthy
+    let upstreams: Vec<upstreams::Model> = Upstream::find()
+        .filter(upstreams::Column::Id.is_in(upstream_ids.iter().copied()))
+        .filter(upstreams::Column::Enabled.eq(true))
+        .filter(upstreams::Column::IsHealthy.eq(true))
+        .order_by_asc(upstreams::Column::Priority)
+        .all(db)
+        .await
+        .map_err(AppError::Database)?;
+
+    if upstreams.is_empty() {
+        return Err(AppError::NoAvailableUpstream);
+    }
+
+    // Use the load balancing strategy from the first upstream
+    let strategy = upstreams[0].lb_strategy.as_str();
+
+    match strategy {
+        "weighted" => select_weighted(&upstreams),
+        "failover" => Ok(upstreams.into_iter().next().unwrap()),
+        _ => {
+            // round_robin (default)
+            let idx = state
+                .lb_counter
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+                % upstreams.len();
+            Ok(upstreams[idx].clone())
+        }
+    }
+}
+
 fn select_weighted(upstreams: &[upstreams::Model]) -> Result<upstreams::Model, AppError> {
     let total_weight: i32 = upstreams.iter().map(|u| u.weight.max(1)).sum();
     let mut rng_val = rand::random::<u32>() % (total_weight as u32);
