@@ -1,4 +1,5 @@
 use actix_web::{web, App, HttpResponse, HttpServer};
+use actix_files as fs;
 use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
 use tracing_actix_web::TracingLogger;
@@ -31,16 +32,6 @@ async fn main() -> anyhow::Result<()> {
 
     let config = config::AppConfig::from_env()?;
 
-    // Ensure the data directory exists for SQLite
-    if config.database_url.starts_with("sqlite://") {
-        let db_path = config.database_url.trim_start_matches("sqlite://");
-        if let Some(parent) = std::path::Path::new(db_path).parent() {
-            if !parent.as_os_str().is_empty() {
-                std::fs::create_dir_all(parent)?;
-            }
-        }
-    }
-
     // Connect to database
     let db = db::init(&config.database_url).await?;
 
@@ -69,8 +60,22 @@ async fn main() -> anyhow::Result<()> {
     let bind_addr = format!("0.0.0.0:{}", config.server_port);
     tracing::info!(addr = %bind_addr, "Starting API-Transit server");
 
+    // Get frontend dist path from env or use default
+    let frontend_dist = std::env::var("FRONTEND_DIST")
+        .unwrap_or_else(|_| "./frontend/dist".to_string());
+    let frontend_path = std::path::Path::new(&frontend_dist);
+    let serve_frontend = frontend_path.exists();
+
+    if serve_frontend {
+        tracing::info!(path = %frontend_dist, "Serving frontend static files");
+    } else {
+        tracing::warn!(path = %frontend_dist, "Frontend dist directory not found, skipping static file serving");
+    }
+
+    let frontend_dist_clone = frontend_dist.clone();
+
     HttpServer::new(move || {
-        App::new()
+        let mut app = App::new()
             .app_data(app_state.clone())
             .wrap(TracingLogger::default())
             // Public health probe
@@ -90,7 +95,28 @@ async fn main() -> anyhow::Result<()> {
                 web::scope("/api")
                     .wrap(middleware::auth::TokenAuth)
                     .default_service(web::route().to(api::proxy::proxy_handler)),
-            )
+            );
+
+        // Serve frontend static files if available
+        if serve_frontend {
+            let dist_path = frontend_dist_clone.clone();
+            app = app
+                .service(fs::Files::new("/", &frontend_dist_clone)
+                    .index_file("index.html")
+                    .use_last_modified(true)
+                    .use_etag(true)
+                    .prefer_utf8(true)
+                    // SPA fallback: serve index.html for all non-API routes
+                    .default_handler(web::get().to(move || {
+                        let path = dist_path.clone();
+                        async move {
+                            let index_path = std::path::Path::new(&path).join("index.html");
+                            fs::NamedFile::open_async(index_path).await
+                        }
+                    })));
+        }
+
+        app
     })
     .bind(&bind_addr)?
     .run()

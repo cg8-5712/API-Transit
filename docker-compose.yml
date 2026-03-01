@@ -1,7 +1,7 @@
 services:
   backend:
     build:
-      context: ./backend
+      context: .
       dockerfile: Dockerfile         # swap to Dockerfile.arm64 when targeting ARM64
     image: api-transit:latest
     restart: unless-stopped

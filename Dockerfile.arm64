@@ -12,43 +12,57 @@ COPY frontend/ ./
 RUN yarn build
 
 # ---------------------------------------------------------------------------
-# Stage 2: Build Backend
+# Stage 2: Build Backend (ARM64 cross-compile)
 # ---------------------------------------------------------------------------
 FROM rust:1.93-slim AS backend-builder
 
+# Install cross-compilation tools
+RUN apt-get update && apt-get install -y \
+    gcc-aarch64-linux-gnu \
+    musl-tools \
+    && rm -rf /var/lib/apt/lists/*
+
+# Add ARM64 target
+RUN rustup target add aarch64-unknown-linux-musl
+
 WORKDIR /app
 
-# Cache dependencies separately from source for faster rebuilds.
+# Configure cargo for cross-compilation
+RUN mkdir -p .cargo && \
+    echo '[target.aarch64-unknown-linux-musl]' > .cargo/config.toml && \
+    echo 'linker = "aarch64-linux-gnu-gcc"' >> .cargo/config.toml
+
+# Cache dependencies
 COPY Cargo.toml Cargo.lock ./
 RUN mkdir -p src && echo "fn main() {}" > src/main.rs
-RUN cargo build --release 2>/dev/null || true
+RUN cargo build --release --target aarch64-unknown-linux-musl 2>/dev/null || true
 
-# Build the real source.
+# Build the real source
 COPY src ./src
-RUN touch src/main.rs && cargo build --release
+RUN touch src/main.rs && cargo build --release --target aarch64-unknown-linux-musl
 
 # ---------------------------------------------------------------------------
-# Stage 3: Runtime
+# Stage 3: Runtime (ARM64)
 # ---------------------------------------------------------------------------
 FROM debian:bookworm-slim AS runtime
 
-# Install CA certificates for HTTPS upstream calls.
+# Install CA certificates for HTTPS upstream calls
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Run as non-root user.
+# Run as non-root user
 RUN useradd -r -u 1000 -g nogroup api-transit
 
 WORKDIR /app
 
-COPY --from=backend-builder /app/target/release/api-transit /usr/local/bin/api-transit
+COPY --from=backend-builder /app/target/aarch64-unknown-linux-musl/release/api-transit /usr/local/bin/api-transit
 RUN chmod +x /usr/local/bin/api-transit
 
 # Copy frontend static files
 COPY --from=frontend-builder /frontend/dist /app/frontend/dist
 
-# Data directory for SQLite.
+# Data directory for SQLite
 RUN mkdir -p /app/data && chown -R 1000:nogroup /app
 
 USER 1000:nogroup
