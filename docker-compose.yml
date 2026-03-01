@@ -2,18 +2,24 @@ services:
   backend:
     build:
       context: ./backend
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile         # swap to Dockerfile.arm64 when targeting ARM64
     image: api-transit:latest
     restart: unless-stopped
     ports:
       - "8080:8080"
     volumes:
-      - ./data:/app/data
+      - ./data:/app/data             # persistent SQLite database
     env_file:
       - .env
+    environment:
+      RUST_LOG: "info"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/health || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 10s
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          memory: 256M              # comfortable on Raspberry Pi 4 with 4 GB RAM
